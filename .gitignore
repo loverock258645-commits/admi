@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-test/
+.npm-cache/
+.env
+.DS_Store
+npm-debug.log*
+operation_logs.jsonl
+tests/output/*.md

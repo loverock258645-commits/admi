@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "outDir": "dist-test",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": [
+    "server/deidentify.ts",
+    "server/openai.ts",
+    "server/prompts/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}
