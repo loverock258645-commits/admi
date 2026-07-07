@@ -2,6 +2,7 @@ import { useState } from "react";
 import { apiRequest } from "../api";
 
 const SUMMARY_MODES = [
+  { value: "clinical", label: "⭐ 臨床模式（Clinical）" },
   { value: "auto", label: "自動判斷" },
   { value: "general", label: "一般病歷摘要" },
   { value: "nursingHandoff", label: "護理交班" },
@@ -25,8 +26,8 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [sourceText, setSourceText] = useState("");
   const [deidentifiedText, setDeidentifiedText] = useState("");
   const [summary, setSummary] = useState("");
-  const [mode, setMode] = useState<SummaryMode>("auto");
-  const [usedModeLabel, setUsedModeLabel] = useState("自動判斷");
+  const [mode, setMode] = useState<SummaryMode>("clinical");
+  const [usedModeLabel, setUsedModeLabel] = useState("⭐ 臨床模式（Clinical）");
   const [error, setError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
   const [deidentifying, setDeidentifying] = useState(false);
@@ -36,7 +37,10 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setSourceText("");
     setDeidentifiedText("");
     setSummary("");
-    setUsedModeLabel(SUMMARY_MODES.find((item) => item.value === mode)?.label ?? "自動判斷");
+    setUsedModeLabel(
+      SUMMARY_MODES.find((item) => item.value === mode)?.label ??
+        "⭐ 臨床模式（Clinical）"
+    );
     setError("");
     setCopyStatus("");
   }
@@ -141,7 +145,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
                 setCopyStatus("");
                 setUsedModeLabel(
                   SUMMARY_MODES.find((item) => item.value === nextMode)?.label ??
-                    "自動判斷"
+                    "⭐ 臨床模式（Clinical）"
                 );
               }}
             >

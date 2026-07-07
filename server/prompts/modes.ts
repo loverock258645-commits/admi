@@ -1,6 +1,8 @@
 import type { ModePrompt, SummaryMode } from "./types.js";
+import { clinicalModePrompt } from "./clinicalModePrompt.js";
 
 export const modePrompts: Record<SummaryMode, ModePrompt> = {
+  clinical: clinicalModePrompt,
   auto: {
     label: "自動判斷",
     purpose: "由 AI 先判斷文件類型，再選擇最適合的臨床摘要格式。",
