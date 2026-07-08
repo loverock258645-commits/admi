@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import express from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { z } from "zod";
@@ -56,7 +56,7 @@ app.use(
   })
 );
 
-app.use((_request, response, next) => {
+app.use((_request: Request, response: Response, next: NextFunction) => {
   response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   response.setHeader("Pragma", "no-cache");
   response.setHeader("Expires", "0");
@@ -75,7 +75,7 @@ const loginLimiter = rateLimit({
   legacyHeaders: false
 });
 
-app.post("/api/login", loginLimiter, async (request, response) => {
+app.post("/api/login", loginLimiter, async (request: Request, response: Response) => {
   const schema = z.object({
     username: z.string().trim().min(1).max(80),
     password: z.string().min(1).max(200)
@@ -127,7 +127,7 @@ app.post("/api/login", loginLimiter, async (request, response) => {
   response.json({ ok: true });
 });
 
-app.post("/api/logout", requireAuth, async (request, response) => {
+app.post("/api/logout", requireAuth, async (request: Request, response: Response) => {
   const username = request.auth?.username;
   const loginTime = request.auth?.loginTime;
   clearSessionCookie(response);
@@ -140,7 +140,7 @@ app.post("/api/logout", requireAuth, async (request, response) => {
   response.json({ ok: true });
 });
 
-app.get("/api/me", (request, response) => {
+app.get("/api/me", (request: Request, response: Response) => {
   if (!request.auth) {
     response.status(401).json({ authenticated: false });
     return;
@@ -152,7 +152,7 @@ app.get("/api/me", (request, response) => {
   });
 });
 
-app.post("/api/deidentify", requireAuth, async (request, response) => {
+app.post("/api/deidentify", requireAuth, async (request: Request, response: Response) => {
   const parsed = textSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ message: "invalid_text" });
@@ -180,7 +180,7 @@ app.post("/api/deidentify", requireAuth, async (request, response) => {
   }
 });
 
-app.post("/api/summarize", requireAuth, async (request, response) => {
+app.post("/api/summarize", requireAuth, async (request: Request, response: Response) => {
   const parsed = summarizeSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ message: "invalid_text" });
@@ -212,7 +212,7 @@ app.post("/api/summarize", requireAuth, async (request, response) => {
 
 if (isProduction) {
   app.use(express.static(clientDistPath, { etag: false, maxAge: 0 }));
-  app.get("*", (_request, response) => {
+  app.get("*", (_request: Request, response: Response) => {
     response.sendFile(path.join(clientDistPath, "index.html"));
   });
 }
