@@ -28,8 +28,11 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [summary, setSummary] = useState("");
   const [mode, setMode] = useState<SummaryMode>("clinical");
   const [usedModeLabel, setUsedModeLabel] = useState("⭐ 臨床模式（Clinical）");
+  const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
+  const [pdfInputKey, setPdfInputKey] = useState(0);
   const [error, setError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
+  const [pdfUploading, setPdfUploading] = useState(false);
   const [deidentifying, setDeidentifying] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
 
@@ -37,6 +40,8 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setSourceText("");
     setDeidentifiedText("");
     setSummary("");
+    setSelectedPdf(null);
+    setPdfInputKey((value) => value + 1);
     setUsedModeLabel(
       SUMMARY_MODES.find((item) => item.value === mode)?.label ??
         "⭐ 臨床模式（Clinical）"
@@ -61,6 +66,43 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
       setError("個資遮蔽失敗，請稍後再試。");
     } finally {
       setDeidentifying(false);
+    }
+  }
+
+  async function handlePdfDeidentify() {
+    if (!selectedPdf) return;
+    setError("");
+    setCopyStatus("");
+    setPdfUploading(true);
+
+    try {
+      const response = await fetch("/api/pdf/deidentify", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/pdf"
+        },
+        body: await selectedPdf.arrayBuffer()
+      });
+
+      const result = (await response.json().catch(() => ({}))) as {
+        extractedText?: string;
+        text?: string;
+        message?: string;
+      };
+
+      if (!response.ok || !result.text || !result.extractedText) {
+        throw new Error(result.message || "pdf_deidentify_failed");
+      }
+
+      setSourceText(result.extractedText);
+      setDeidentifiedText(result.text);
+      setSummary("");
+    } catch {
+      setError("PDF 解析或個資遮蔽失敗，請確認檔案為可選取文字的 PDF。");
+    } finally {
+      setPdfUploading(false);
     }
   }
 
@@ -131,6 +173,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
         </section>
 
         <section className="mb-5 rounded-lg border border-clinical-line bg-white p-4 shadow-sm">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
           <label className="block max-w-sm">
             <span className="mb-2 block text-sm font-semibold text-clinical-ink">
               摘要模式
@@ -156,6 +199,38 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
               ))}
             </select>
           </label>
+
+          <div>
+            <span className="mb-2 block text-sm font-semibold text-clinical-ink">
+              PDF 病摘
+            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                key={pdfInputKey}
+                accept="application/pdf,.pdf"
+                className="block max-w-full text-sm text-clinical-muted file:mr-3 file:rounded-md file:border file:border-clinical-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-clinical-ink hover:file:bg-clinical-panel"
+                type="file"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setSelectedPdf(file);
+                  setError("");
+                  setCopyStatus("");
+                }}
+              />
+              <button
+                className="rounded-md bg-clinical-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-clinical-tealDark disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handlePdfDeidentify}
+                disabled={!selectedPdf || pdfUploading}
+                type="button"
+              >
+                {pdfUploading ? "解析中..." : "解析 PDF 並遮蔽個資"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-clinical-muted">
+              目前僅支援可選取文字的 PDF，不支援掃描影像 OCR。PDF 不會儲存，解析後請先確認遮蔽預覽再產生摘要。
+            </p>
+          </div>
+          </div>
         </section>
 
         {error ? (

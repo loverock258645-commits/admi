@@ -17,6 +17,7 @@ import {
 import { writeAuditEvent } from "./audit.js";
 import { deIdentifyMedicalText } from "./deidentify.js";
 import { summarizeMedicalText } from "./openai.js";
+import { extractTextFromPdfBuffer } from "./pdfText.js";
 import { getModeLabel, isSummaryMode } from "./prompts/index.js";
 
 dotenv.config();
@@ -179,6 +180,52 @@ app.post("/api/deidentify", requireAuth, async (request: Request, response: Resp
     response.status(500).json({ message: "deidentify_failed" });
   }
 });
+
+app.post(
+  "/api/pdf/deidentify",
+  requireAuth,
+  express.raw({ type: "application/pdf", limit: "10mb" }),
+  async (request: Request, response: Response) => {
+    if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
+      response.status(400).json({ message: "invalid_pdf" });
+      return;
+    }
+
+    try {
+      const extractedText = extractTextFromPdfBuffer(request.body);
+      if (!extractedText.trim()) {
+        await writeAuditEvent({
+          username: request.auth?.username,
+          loginTime: request.auth?.loginTime,
+          feature: "pdfDeidentify",
+          success: false,
+          errorType: "pdf_text_not_found"
+        });
+        response.status(422).json({ message: "pdf_text_not_found" });
+        return;
+      }
+
+      const text = deIdentifyMedicalText(extractedText);
+      await writeAuditEvent({
+        username: request.auth?.username,
+        loginTime: request.auth?.loginTime,
+        feature: "pdfDeidentify",
+        success: true
+      });
+      response.json({ extractedText, text });
+    } catch (error) {
+      const errorType = error instanceof Error ? error.message : "pdf_deidentify_failed";
+      await writeAuditEvent({
+        username: request.auth?.username,
+        loginTime: request.auth?.loginTime,
+        feature: "pdfDeidentify",
+        success: false,
+        errorType
+      });
+      response.status(400).json({ message: "pdf_deidentify_failed" });
+    }
+  }
+);
 
 app.post("/api/summarize", requireAuth, async (request: Request, response: Response) => {
   const parsed = summarizeSchema.safeParse(request.body);

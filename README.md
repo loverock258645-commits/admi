@@ -109,7 +109,28 @@ npm start
 - `POST /api/logout`：清除登入狀態。
 - `GET /api/me`：檢查目前是否登入。
 - `POST /api/deidentify`：執行個資遮蔽，不儲存原始文字。
+- `POST /api/pdf/deidentify`：接收文字型 PDF，於記憶體抽取文字並執行個資遮蔽，不儲存 PDF 或病歷文字。
 - `POST /api/summarize`：僅登入後可用，接收文字與 `mode`，後端會再次去識別化後才呼叫 OpenAI API。
+
+## PDF 病摘上傳
+
+摘要頁支援上傳文字型 PDF：
+
+1. 選擇 PDF 檔案。
+2. 按「解析 PDF 並遮蔽個資」。
+3. 系統在後端記憶體中抽取文字。
+4. 自動執行 `deIdentifyMedicalText()`。
+5. 回傳原始抽取文字與去識別化預覽。
+6. 使用者確認後，再按「產生摘要」。
+
+安全限制：
+
+- 僅支援可選取文字的 PDF。
+- 暫不支援掃描影像 PDF 或 OCR。
+- PDF 檔案不寫入硬碟。
+- 不建立 `uploads/` 資料夾。
+- 不把 PDF 內容、抽取文字或去識別化後文字寫入操作紀錄。
+- 上傳大小限制為 10 MB。
 
 ## 摘要模式
 

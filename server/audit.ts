@@ -5,7 +5,7 @@ type AuditEvent = {
   username?: string;
   loginTime?: string;
   usedAt?: string;
-  feature: "login" | "logout" | "deidentify" | "summarize";
+  feature: "login" | "logout" | "deidentify" | "pdfDeidentify" | "summarize";
   success: boolean;
   errorType?: string;
 };
