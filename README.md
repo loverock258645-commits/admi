@@ -175,7 +175,7 @@ npm run test:fixtures
 5. Build Command 設定：
 
 ```bash
-npm ci && npm run build
+npm ci --include=dev && npm run build
 ```
 
 6. Start Command 設定：
