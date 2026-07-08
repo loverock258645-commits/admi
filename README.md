@@ -170,30 +170,32 @@ npm run test:fixtures
 
 1. 將專案推到私人 GitHub repository。
 2. 在 Render 建立 Web Service。
-3. Runtime 選 Node。
-4. Build Command 設定：
+3. 可選擇使用專案內的 `render.yaml` 建立 Blueprint，或手動建立 Web Service。
+4. Runtime 選 Node。
+5. Build Command 設定：
 
 ```bash
-npm install && npm run build
+npm ci && npm run build
 ```
 
-5. Start Command 設定：
+6. Start Command 設定：
 
 ```bash
 npm start
 ```
 
-6. 在 Render Environment Variables 設定：
+7. 在 Render Environment Variables 設定：
 
 ```env
 OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4.1-mini
 JWT_SECRET=...
 APP_USERNAME=...
 APP_PASSWORD_HASH=...
 NODE_ENV=production
 ```
 
-7. Render 預設提供 HTTPS 網址，請只使用 HTTPS 網址登入。
+8. Render 預設提供 HTTPS 網址，請只使用 HTTPS 網址登入。
 
 也可部署到 Railway 或 Fly.io，原則相同：後端必須持有 OpenAI API Key，前端不得直接接觸金鑰。
 
