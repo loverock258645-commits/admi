@@ -212,7 +212,12 @@ app.post(
         feature: "pdfDeidentify",
         success: true
       });
-      response.json({ extractedText, text });
+      response.json({
+        extractedText,
+        text,
+        extractedCharCount: extractedText.length,
+        deidentifiedCharCount: text.length
+      });
     } catch (error) {
       const errorType = error instanceof Error ? error.message : "pdf_deidentify_failed";
       await writeAuditEvent({

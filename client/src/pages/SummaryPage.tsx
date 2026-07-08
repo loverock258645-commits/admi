@@ -22,16 +22,22 @@ type SummaryPageProps = {
   onLogout: () => void;
 };
 
+const MASK_PATTERN =
+  /(\[(?:病人姓名|聯絡人姓名|病歷號|身分證字號|電話|地址|生日|床號)已遮蔽\])/g;
+
 export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [sourceText, setSourceText] = useState("");
   const [deidentifiedText, setDeidentifiedText] = useState("");
+  const [deidentifiedConfirmed, setDeidentifiedConfirmed] = useState(false);
   const [summary, setSummary] = useState("");
   const [mode, setMode] = useState<SummaryMode>("clinical");
   const [usedModeLabel, setUsedModeLabel] = useState("⭐ 臨床模式（Clinical）");
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [pdfInputKey, setPdfInputKey] = useState(0);
+  const [pdfStatus, setPdfStatus] = useState("");
   const [error, setError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
+  const [deidentifiedCopyStatus, setDeidentifiedCopyStatus] = useState("");
   const [pdfUploading, setPdfUploading] = useState(false);
   const [deidentifying, setDeidentifying] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
@@ -39,20 +45,57 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   function clearSensitiveState() {
     setSourceText("");
     setDeidentifiedText("");
+    setDeidentifiedConfirmed(false);
     setSummary("");
     setSelectedPdf(null);
     setPdfInputKey((value) => value + 1);
+    setPdfStatus("");
     setUsedModeLabel(
       SUMMARY_MODES.find((item) => item.value === mode)?.label ??
         "⭐ 臨床模式（Clinical）"
     );
     setError("");
     setCopyStatus("");
+    setDeidentifiedCopyStatus("");
+  }
+
+  function handleSourceTextChange(value: string) {
+    setSourceText(value);
+    setDeidentifiedText("");
+    setDeidentifiedConfirmed(false);
+    setSummary("");
+    setPdfStatus("");
+    setCopyStatus("");
+    setDeidentifiedCopyStatus("");
+  }
+
+  function renderDeidentifiedPreview() {
+    if (!deidentifiedText) {
+      return "遮蔽後內容會顯示在這裡，請確認後再產生摘要。";
+    }
+
+    return deidentifiedText.split(MASK_PATTERN).map((part, index) => {
+      if (MASK_PATTERN.test(part)) {
+        MASK_PATTERN.lastIndex = 0;
+        return (
+          <mark
+            className="rounded bg-amber-200 px-1 text-clinical-ink"
+            key={`${part}-${index}`}
+          >
+            {part}
+          </mark>
+        );
+      }
+      MASK_PATTERN.lastIndex = 0;
+      return part;
+    });
   }
 
   async function handleDeidentify() {
     setError("");
     setCopyStatus("");
+    setDeidentifiedCopyStatus("");
+    setPdfStatus("");
     setDeidentifying(true);
 
     try {
@@ -61,6 +104,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
         body: JSON.stringify({ text: sourceText })
       });
       setDeidentifiedText(result.text);
+      setDeidentifiedConfirmed(false);
       setSummary("");
     } catch {
       setError("個資遮蔽失敗，請稍後再試。");
@@ -73,6 +117,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     if (!selectedPdf) return;
     setError("");
     setCopyStatus("");
+    setDeidentifiedCopyStatus("");
     setPdfUploading(true);
 
     try {
@@ -89,6 +134,8 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
       const result = (await response.json().catch(() => ({}))) as {
         extractedText?: string;
         text?: string;
+        extractedCharCount?: number;
+        deidentifiedCharCount?: number;
         message?: string;
       };
 
@@ -98,9 +145,17 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
 
       setSourceText(result.extractedText);
       setDeidentifiedText(result.text);
+      setDeidentifiedConfirmed(false);
       setSummary("");
+      const extractedCount = result.extractedCharCount ?? result.extractedText.length;
+      const warning =
+        extractedCount < 300
+          ? "解析字數偏少，這份 PDF 可能不是完整文字型 PDF，請先檢查內容。"
+          : "請檢查遮蔽預覽，確認後再產生摘要。";
+      setPdfStatus(`PDF 已解析 ${extractedCount.toLocaleString()} 字。${warning}`);
     } catch {
       setError("PDF 解析或個資遮蔽失敗，請確認檔案為可選取文字的 PDF。");
+      setPdfStatus("");
     } finally {
       setPdfUploading(false);
     }
@@ -109,6 +164,13 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   async function handleSummarize() {
     setError("");
     setCopyStatus("");
+    setDeidentifiedCopyStatus("");
+
+    if (!deidentifiedConfirmed) {
+      setError("請先確認去識別化後文字預覽，再產生摘要。");
+      return;
+    }
+
     setSummarizing(true);
 
     try {
@@ -133,6 +195,12 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     if (!summary) return;
     await navigator.clipboard.writeText(summary);
     setCopyStatus("已複製全文。");
+  }
+
+  async function handleCopyDeidentifiedText() {
+    if (!deidentifiedText) return;
+    await navigator.clipboard.writeText(deidentifiedText);
+    setDeidentifiedCopyStatus("已複製去識別化文字。");
   }
 
   async function handleLogout() {
@@ -215,6 +283,8 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
                   setSelectedPdf(file);
                   setError("");
                   setCopyStatus("");
+                  setDeidentifiedCopyStatus("");
+                  setPdfStatus(file ? `已選擇：${file.name}` : "");
                 }}
               />
               <button
@@ -229,6 +299,11 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
             <p className="mt-2 text-xs leading-5 text-clinical-muted">
               目前僅支援可選取文字的 PDF，不支援掃描影像 OCR。PDF 不會儲存，解析後請先確認遮蔽預覽再產生摘要。
             </p>
+            {pdfStatus ? (
+              <p className="mt-2 rounded-md border border-clinical-line bg-clinical-panel px-3 py-2 text-xs leading-5 text-clinical-ink">
+                {pdfStatus}
+              </p>
+            ) : null}
           </div>
           </div>
         </section>
@@ -256,7 +331,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
             <textarea
               className="h-[28rem] w-full resize-y rounded-md border border-clinical-line p-3 font-mono text-sm leading-6 outline-none transition focus:border-clinical-teal focus:ring-2 focus:ring-clinical-teal/15"
               value={sourceText}
-              onChange={(event) => setSourceText(event.target.value)}
+              onChange={(event) => handleSourceTextChange(event.target.value)}
               placeholder="請貼上英文病歷內容。頁面重新整理或登出後不會保留。"
               spellCheck={false}
             />
@@ -277,18 +352,45 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
               <h2 className="text-base font-semibold text-clinical-ink">
                 去識別化後文字預覽
               </h2>
-              <button
-                className="rounded-md bg-clinical-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-clinical-tealDark disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={handleSummarize}
-                disabled={!deidentifiedText.trim() || summarizing}
-                type="button"
-              >
-                {summarizing ? "產生中..." : "產生摘要"}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {deidentifiedCopyStatus ? (
+                  <span className="text-sm text-clinical-teal">
+                    {deidentifiedCopyStatus}
+                  </span>
+                ) : null}
+                <button
+                  className="rounded-md border border-clinical-line px-3 py-2 text-sm font-medium text-clinical-ink transition hover:bg-clinical-panel disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleCopyDeidentifiedText}
+                  disabled={!deidentifiedText}
+                  type="button"
+                >
+                  複製去識別化文字
+                </button>
+                <button
+                  className="rounded-md bg-clinical-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-clinical-tealDark disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleSummarize}
+                  disabled={!deidentifiedText.trim() || !deidentifiedConfirmed || summarizing}
+                  type="button"
+                >
+                  {summarizing ? "產生中..." : "產生摘要"}
+                </button>
+              </div>
             </div>
             <pre className="h-[28rem] overflow-auto whitespace-pre-wrap rounded-md border border-clinical-line bg-clinical-panel p-3 font-mono text-sm leading-6 text-clinical-ink">
-              {deidentifiedText || "遮蔽後內容會顯示在這裡，請確認後再產生摘要。"}
+              {renderDeidentifiedPreview()}
             </pre>
+            <label className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-clinical-warn">
+              <input
+                checked={deidentifiedConfirmed}
+                className="mt-1 h-4 w-4 accent-clinical-teal"
+                disabled={!deidentifiedText.trim()}
+                onChange={(event) => setDeidentifiedConfirmed(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                我已確認去識別化預覽，未看到姓名、病歷號、身分證字號、電話、地址、生日、床號或家屬聯絡資訊。
+              </span>
+            </label>
           </section>
         </div>
 

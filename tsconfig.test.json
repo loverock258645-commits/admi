@@ -13,6 +13,7 @@
   },
   "include": [
     "server/deidentify.ts",
+    "server/pdfText.ts",
     "server/openai.ts",
     "server/prompts/**/*.ts",
     "tests/**/*.ts"

@@ -1,10 +1,12 @@
 const MASKS = {
   name: "[病人姓名已遮蔽]",
+  contactName: "[聯絡人姓名已遮蔽]",
   mrn: "[病歷號已遮蔽]",
   id: "[身分證字號已遮蔽]",
   phone: "[電話已遮蔽]",
   address: "[地址已遮蔽]",
-  birthDate: "[生日已遮蔽]"
+  birthDate: "[生日已遮蔽]",
+  bed: "[床號已遮蔽]"
 } as const;
 
 function maskField(
@@ -25,11 +27,27 @@ export function deIdentifyMedicalText(input: string): string {
   let text = input;
 
   text = maskField(text, ["Patient Name", "Name", "姓名"], MASKS.name);
+  text = maskField(
+    text,
+    [
+      "Contact Person",
+      "Emergency Contact",
+      "Family Contact",
+      "Relative Name",
+      "Caregiver Name",
+      "家屬姓名",
+      "聯絡人",
+      "緊急聯絡人",
+      "主要照顧者"
+    ],
+    MASKS.contactName
+  );
   text = maskField(text, ["Chart No", "Chart Number", "MRN", "Medical Record No", "病歷號"], MASKS.mrn);
   text = maskField(text, ["ID No", "ID Number", "National ID", "身分證字號"], MASKS.id);
   text = maskField(text, ["Tel", "Telephone", "Phone", "Mobile", "Cell Phone", "手機", "電話"], MASKS.phone);
   text = maskField(text, ["Address", "地址"], MASKS.address, { consumeLine: true });
   text = maskField(text, ["DOB", "Date of Birth", "Birth Date", "Birthday", "出生日期", "生日"], MASKS.birthDate, { consumeLine: true });
+  text = maskField(text, ["Bed", "Bed No", "Bed Number", "Room Bed", "床號"], MASKS.bed);
 
   text = text.replace(/\b[A-Z][12]\d{8}\b/g, MASKS.id);
   text = text.replace(/\b(?:MRN|Chart\s*No\.?|Chart\s*Number)\s*[:：#-]?\s*[A-Z0-9-]{4,20}\b/gi, (match) => {
