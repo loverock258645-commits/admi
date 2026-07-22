@@ -3,10 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { deIdentifyMedicalText } from "../server/deidentify.js";
 import { getOpenAIModel, summarizeMedicalText } from "../server/openai.js";
-import { getModeLabel, type SummaryMode } from "../server/prompts/index.js";
+import { getModeLabel, isSummaryMode, type SummaryMode } from "../server/prompts/index.js";
 import { fakeMedicalRecordFixtures } from "./fixtures/fakeMedicalRecords.js";
 
-const TEST_MODES: SummaryMode[] = [
+const DEFAULT_TEST_MODES: SummaryMode[] = [
+  "clinical",
   "auto",
   "general",
   "nursingHandoff",
@@ -15,6 +16,24 @@ const TEST_MODES: SummaryMode[] = [
   "hospiceCare"
 ];
 
+function getTestModes() {
+  const configuredModes = process.env.OPENAI_TEST_MODES;
+  if (!configuredModes) return DEFAULT_TEST_MODES;
+
+  const modes = configuredModes
+    .split(",")
+    .map((mode) => mode.trim())
+    .filter(Boolean);
+  const invalidModes = modes.filter((mode) => !isSummaryMode(mode));
+  if (invalidModes.length) {
+    throw new Error(`invalid_openai_test_modes:${invalidModes.join(",")}`);
+  }
+
+  return modes as SummaryMode[];
+}
+
+const TEST_MODES = getTestModes();
+
 type RiskCheck = {
   label: string;
   details: string[];
@@ -22,6 +41,14 @@ type RiskCheck = {
 
 function formatDateForFile(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function getOutputFilename(date: Date) {
+  const base = `${formatDateForFile(date)}-ai-output-test`;
+  const defaultModeKey = DEFAULT_TEST_MODES.join("-");
+  const modeKey = TEST_MODES.join("-");
+  const suffix = modeKey === defaultModeKey ? "" : `-${modeKey}`;
+  return `${base}${suffix}.md`;
 }
 
 function escapeMarkdownFence(text: string) {
@@ -47,10 +74,18 @@ function countMatches(text: string, patterns: RegExp[]) {
 
 function getRequiredDecisionTerms(sourceText: string) {
   const source = sourceText.toLowerCase();
-  const terms: Array<{ sourceTerm: string; acceptableOutput: Array<string | RegExp> }> = [
+  const terms: Array<{
+    sourceTerm: string;
+    acceptableOutput: Array<string | RegExp>;
+    skipIfSourceMatches?: RegExp[];
+  }> = [
     {
       sourceTerm: "DNR",
-      acceptableOutput: ["DNR", "不施行心肺復甦術", "不急救", "不 CPR", "no CPR"]
+      acceptableOutput: ["DNR", "不施行心肺復甦術", "不急救", "不 CPR", "no CPR"],
+      skipIfSourceMatches: [
+        /\bno\s+DNR\s+or\s+hospice\s+discussion\s+was\s+documented\b/i,
+        /\bno\s+DNR\s+discussion\s+was\s+documented\b/i
+      ]
     },
     {
       sourceTerm: "comfort care",
@@ -58,7 +93,11 @@ function getRequiredDecisionTerms(sourceText: string) {
     },
     {
       sourceTerm: "hospice",
-      acceptableOutput: ["hospice", "安寧", "安寧療護", "安寧病房"]
+      acceptableOutput: ["hospice", "安寧", "安寧療護", "安寧病房", "緩和醫療", "舒適照護"],
+      skipIfSourceMatches: [
+        /\bno\s+DNR\s+or\s+hospice\s+discussion\s+was\s+documented\b/i,
+        /\bno\s+hospice\s+discussion\s+was\s+documented\b/i
+      ]
     },
     {
       sourceTerm: "palliative",
@@ -78,13 +117,18 @@ function getRequiredDecisionTerms(sourceText: string) {
     }
   ];
 
-  return terms.filter((term) => source.includes(term.sourceTerm.toLowerCase()));
+  return terms.filter((term) => {
+    if (!source.includes(term.sourceTerm.toLowerCase())) return false;
+    if (term.skipIfSourceMatches?.some((pattern) => pattern.test(sourceText))) return false;
+    return true;
+  });
 }
 
 function runRiskChecks(args: {
   originalText: string;
   outputText: string;
   privacyForbiddenContent: string[];
+  mode: SummaryMode;
 }) {
   const risks: RiskCheck[] = [];
   const output = args.outputText;
@@ -200,6 +244,30 @@ function runRiskChecks(args: {
     });
   }
 
+  if (args.mode === "clinical") {
+    const hiddenSectionViolations = ["病歷未提及", "N/A", "Ｎ/A"].filter((term) =>
+      output.includes(term)
+    );
+    if (/^無[。.]?$/m.test(output)) {
+      hiddenSectionViolations.push("單獨輸出「無」");
+    }
+    if (hiddenSectionViolations.length) {
+      risks.push({
+        label: "Clinical 模式出現應隱藏的空資料文字",
+        details: hiddenSectionViolations
+      });
+    }
+
+    const gregorianDates =
+      output.match(/\b20\d{2}(?:[/-]\d{1,2}[/-]\d{1,2}|年\d{1,2}月\d{1,2}日)/g) ?? [];
+    if (gregorianDates.length) {
+      risks.push({
+        label: "Clinical 模式日期未轉民國年",
+        details: [...new Set(gregorianDates)]
+      });
+    }
+  }
+
   return risks;
 }
 
@@ -247,7 +315,7 @@ async function main() {
   const startedAt = new Date();
   const outputDir = path.resolve(process.cwd(), "tests/output");
   await mkdir(outputDir, { recursive: true });
-  const outputPath = path.join(outputDir, `${formatDateForFile(startedAt)}-ai-output-test.md`);
+  const outputPath = path.join(outputDir, getOutputFilename(startedAt));
   const model = getOpenAIModel();
   const markdown: string[] = [
     "# AI 輸出品質測試",
@@ -281,7 +349,8 @@ async function main() {
       const risks = runRiskChecks({
         originalText: fixture.englishOriginal,
         outputText: aiOutput,
-        privacyForbiddenContent: fixture.privacyForbiddenContent
+        privacyForbiddenContent: fixture.privacyForbiddenContent,
+        mode
       });
 
       if (risks.length) {

@@ -18,6 +18,7 @@
     "server/pdfQuality.ts",
     "server/riskCheck.ts",
     "server/openai.ts",
+    "server/summaryPostProcess.ts",
     "server/prompts/**/*.ts",
     "scripts/deidentify-local.ts",
     "tests/**/*.ts"

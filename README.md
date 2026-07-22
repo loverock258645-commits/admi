@@ -198,6 +198,7 @@ npm start
 - `server/prompts/glossaryPrompt.ts`：台灣臨床常用名詞對照。
 - `server/prompts/modes.ts`：各摘要模式的用途、模式指令與輸出格式。
 - `server/prompts/index.ts`：組合完整 prompt。
+- `server/summaryPostProcess.ts`：摘要後處理，轉換完整西元日期為民國年；Clinical 模式會移除空資料區塊、缺資料文字與正常值敘述。
 
 ## 假病歷測試資料
 
@@ -242,6 +243,28 @@ npm run test:local-deidentify
 ```
 
 此測試會使用虛構假病歷檢查本機 `.txt` 與文字型 PDF 去識別化流程，並確認掃描型 PDF 不會被誤產生可摘要內容。
+
+執行摘要後處理測試：
+
+```bash
+npm run test:summary-postprocess
+```
+
+此測試會檢查完整西元日期轉民國年、Clinical 模式移除「病歷未提及」等空資料文字，以及移除正常值敘述。
+
+執行 OpenAI 實際輸出測試：
+
+```bash
+npm run test:openai-output
+```
+
+若只測 Clinical 模式：
+
+```bash
+OPENAI_TEST_MODES=clinical npm run test:openai-output
+```
+
+輸出會寫到 `tests/output/`，該資料夾已加入 `.gitignore`，不可使用真實病歷測試。
 
 ## 操作紀錄
 

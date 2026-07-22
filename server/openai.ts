@@ -1,4 +1,5 @@
 import { buildSummaryPrompt, getModeLabel, type SummaryMode } from "./prompts/index.js";
+import { postProcessMedicalSummary } from "./summaryPostProcess.js";
 
 const MODEL = "gpt-4.1-mini";
 
@@ -57,5 +58,5 @@ export async function summarizeMedicalText(text: string, mode: SummaryMode) {
     throw new Error("empty_openai_response");
   }
 
-  return outputText;
+  return postProcessMedicalSummary(outputText, mode);
 }
