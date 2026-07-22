@@ -181,6 +181,7 @@ npm start
 `mode` 可使用：
 
 - `clinical`：臨床模式，預設模式，偏向第一線護理師快速閱讀與交班。
+- `clinicalNarrative`：臨床脈絡模式，用較完整時間線整理就醫原因、重要發現、處置、病況變化與醫療決策。
 - `auto`：自動判斷文件類型，再套用最適合格式。
 - `general`：一般病歷摘要。
 - `nursingHandoff`：護理交班。
@@ -196,9 +197,10 @@ npm start
 
 - `server/prompts/baseRulesPrompt.ts`：所有模式共用底層規則。
 - `server/prompts/glossaryPrompt.ts`：台灣臨床常用名詞對照。
+- `server/prompts/clinicalNarrativeModePrompt.ts`：臨床脈絡模式，強調時間線、因果關係與住院經過脈絡。
 - `server/prompts/modes.ts`：各摘要模式的用途、模式指令與輸出格式。
 - `server/prompts/index.ts`：組合完整 prompt。
-- `server/summaryPostProcess.ts`：摘要後處理，轉換完整西元日期為民國年；Clinical 模式會移除空資料區塊、缺資料文字與正常值敘述。
+- `server/summaryPostProcess.ts`：摘要後處理，轉換完整西元日期為民國年；Clinical 與 Clinical Narrative 模式會移除空資料區塊、缺資料文字與正常值敘述。
 
 ## 假病歷測試資料
 

@@ -8,6 +8,7 @@ import { fakeMedicalRecordFixtures } from "./fixtures/fakeMedicalRecords.js";
 
 const DEFAULT_TEST_MODES: SummaryMode[] = [
   "clinical",
+  "clinicalNarrative",
   "auto",
   "general",
   "nursingHandoff",
@@ -244,7 +245,7 @@ function runRiskChecks(args: {
     });
   }
 
-  if (args.mode === "clinical") {
+  if (args.mode === "clinical" || args.mode === "clinicalNarrative") {
     const hiddenSectionViolations = ["病歷未提及", "N/A", "Ｎ/A"].filter((term) =>
       output.includes(term)
     );
@@ -253,7 +254,7 @@ function runRiskChecks(args: {
     }
     if (hiddenSectionViolations.length) {
       risks.push({
-        label: "Clinical 模式出現應隱藏的空資料文字",
+        label: `${getModeLabel(args.mode)} 出現應隱藏的空資料文字`,
         details: hiddenSectionViolations
       });
     }
@@ -262,7 +263,7 @@ function runRiskChecks(args: {
       output.match(/\b20\d{2}(?:[/-]\d{1,2}[/-]\d{1,2}|年\d{1,2}月\d{1,2}日)/g) ?? [];
     if (gregorianDates.length) {
       risks.push({
-        label: "Clinical 模式日期未轉民國年",
+        label: `${getModeLabel(args.mode)} 日期未轉民國年`,
         details: [...new Set(gregorianDates)]
       });
     }

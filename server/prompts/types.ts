@@ -1,5 +1,6 @@
 export const SUMMARY_MODES = [
   "clinical",
+  "clinicalNarrative",
   "auto",
   "general",
   "nursingHandoff",

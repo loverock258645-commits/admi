@@ -22,6 +22,10 @@ const clinicalInput = `【過去病史】
 急性心衰合併肋膜積液。`;
 
 const clinicalOutput = postProcessMedicalSummary(clinicalInput, "clinical");
+const clinicalNarrativeOutput = postProcessMedicalSummary(
+  clinicalInput,
+  "clinicalNarrative"
+);
 
 addResult(
   "Clinical 後處理會移除空資料區塊",
@@ -43,6 +47,16 @@ addResult(
     clinicalOutput.includes("BNP 2860") &&
     !clinicalOutput.includes("引流管BNP"),
   clinicalOutput
+);
+
+addResult(
+  "臨床脈絡模式後處理會移除空資料、正常值並轉民國年",
+  !clinicalNarrativeOutput.includes("【過去病史】") &&
+    !clinicalNarrativeOutput.includes("病歷未提及") &&
+    !clinicalNarrativeOutput.includes("腎功能正常") &&
+    clinicalNarrativeOutput.includes("民國115年1月10日") &&
+    clinicalNarrativeOutput.includes("BNP 2860"),
+  clinicalNarrativeOutput
 );
 
 const generalInput = `【重要過去病史】

@@ -53,7 +53,7 @@ function removeNormalValueStatements(summary: string) {
 export function postProcessMedicalSummary(summary: string, mode: SummaryMode) {
   let processed = normalizeTaiwanDates(summary);
 
-  if (mode === "clinical") {
+  if (mode === "clinical" || mode === "clinicalNarrative") {
     processed = removeClinicalEmptySections(processed);
     processed = removeNormalValueStatements(processed);
   }

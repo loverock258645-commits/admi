@@ -3,6 +3,7 @@ import { ApiError, apiRequest } from "../api";
 
 const SUMMARY_MODES = [
   { value: "clinical", label: "⭐ 臨床模式（Clinical）" },
+  { value: "clinicalNarrative", label: "臨床脈絡模式（Clinical Narrative）" },
   { value: "auto", label: "自動判斷" },
   { value: "general", label: "一般病歷摘要" },
   { value: "nursingHandoff", label: "護理交班" },

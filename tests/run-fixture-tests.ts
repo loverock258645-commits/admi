@@ -13,6 +13,7 @@ type TestResult = {
 
 const modeNames: Record<(typeof SUMMARY_MODES)[number], string> = {
   clinical: "臨床模式",
+  clinicalNarrative: "臨床脈絡模式",
   auto: "自動判斷",
   general: "一般病歷摘要",
   nursingHandoff: "護理交班",
