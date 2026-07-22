@@ -1,4 +1,5 @@
 import { deIdentifyMedicalText } from "../server/deidentify.js";
+import { analyzePdfExtraction } from "../server/pdfQuality.js";
 import { extractTextFromPdfBuffer } from "../server/pdfText.js";
 import { fakeMedicalRecordFixtures } from "./fixtures/fakeMedicalRecords.js";
 
@@ -59,6 +60,7 @@ for (const fixture of fakeMedicalRecordFixtures) {
   const pdfBuffer = buildTextPdf(fixture.englishOriginal);
   const extractedText = extractTextFromPdfBuffer(pdfBuffer);
   const deidentifiedText = deIdentifyMedicalText(extractedText);
+  const quality = analyzePdfExtraction(pdfBuffer, extractedText);
 
   addResult(
     `${fixture.title}：文字型 PDF 可抽取內容`,
@@ -83,13 +85,35 @@ for (const fixture of fakeMedicalRecordFixtures) {
     missingDates.length === 0,
     missingDates.length ? missingDates.join(", ") : "皆保留"
   );
+
+  addResult(
+    `${fixture.title}：PDF 抽取品質可直接摘要`,
+    quality.canSummarize,
+    `${quality.status}，段落：${quality.detectedSections.join(", ") || "未偵測"}`
+  );
 }
 
-const imageOnlyText = extractTextFromPdfBuffer(buildImageOnlyPdf());
+const imageOnlyPdf = buildImageOnlyPdf();
+const imageOnlyText = extractTextFromPdfBuffer(imageOnlyPdf);
+const imageOnlyQuality = analyzePdfExtraction(imageOnlyPdf, imageOnlyText);
 addResult(
   "掃描型或影像型 PDF 會被視為未抽取到文字",
   imageOnlyText.trim().length === 0,
   imageOnlyText.trim().length === 0 ? "未抽取到文字" : imageOnlyText.slice(0, 80)
+);
+addResult(
+  "掃描型或影像型 PDF 會被品質閘門阻擋",
+  !imageOnlyQuality.canSummarize,
+  imageOnlyQuality.blockingIssues.join(", ")
+);
+
+const shortPdf = buildTextPdf("Patient Name: Test Patient\nShort note only.");
+const shortPdfText = extractTextFromPdfBuffer(shortPdf);
+const shortPdfQuality = analyzePdfExtraction(shortPdf, shortPdfText);
+addResult(
+  "過短 PDF 會被品質閘門阻擋",
+  !shortPdfQuality.canSummarize,
+  shortPdfQuality.blockingIssues.join(", ")
 );
 
 const contactFixture = `Patient Name: Test Patient

@@ -21,6 +21,7 @@ import {
 } from "./confirmationToken.js";
 import { deIdentifyMedicalText } from "./deidentify.js";
 import { summarizeMedicalText } from "./openai.js";
+import { analyzePdfExtraction } from "./pdfQuality.js";
 import { extractTextFromPdfBuffer } from "./pdfText.js";
 import { getModeLabel, isSummaryMode } from "./prompts/index.js";
 import { checkDeidentifiedTextRisk, checkSummaryOutputRisk } from "./riskCheck.js";
@@ -213,7 +214,8 @@ app.post(
       }
 
       const text = deIdentifyMedicalText(extractedText);
-      const confirmation = createConfirmationToken(text);
+      const pdfQuality = analyzePdfExtraction(request.body, extractedText);
+      const confirmation = pdfQuality.canSummarize ? createConfirmationToken(text) : {};
       await writeAuditEvent({
         username: request.auth?.username,
         loginTime: request.auth?.loginTime,
@@ -225,6 +227,7 @@ app.post(
         text,
         extractedCharCount: extractedText.length,
         deidentifiedCharCount: text.length,
+        pdfQuality,
         ...confirmation
       });
     } catch (error) {

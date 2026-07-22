@@ -22,6 +22,17 @@ type SummaryPageProps = {
   onLogout: () => void;
 };
 
+type PdfQualityReport = {
+  status: "good" | "caution" | "blocked";
+  canSummarize: boolean;
+  characterCount: number;
+  lineCount: number;
+  estimatedPageCount: number;
+  detectedSections: string[];
+  warnings: string[];
+  blockingIssues: string[];
+};
+
 const MASK_PATTERN =
   /(\[(?:病人姓名|聯絡人姓名|病歷號|身分證字號|電話|地址|生日|床號)已遮蔽\])/g;
 const MASK_TOKEN_PATTERN =
@@ -45,6 +56,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [pdfInputKey, setPdfInputKey] = useState(0);
   const [pdfStatus, setPdfStatus] = useState("");
+  const [pdfQuality, setPdfQuality] = useState<PdfQualityReport | null>(null);
   const [error, setError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
   const [deidentifiedCopyStatus, setDeidentifiedCopyStatus] = useState("");
@@ -55,9 +67,14 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [summarizing, setSummarizing] = useState(false);
   const maskedItemCount = deidentifiedText.match(MASK_PATTERN)?.length ?? 0;
   const canSummarize =
-    deidentifiedText.trim().length > 0 && deidentifiedConfirmed && !summarizing;
+    deidentifiedText.trim().length > 0 &&
+    deidentifiedConfirmed &&
+    confirmationToken.length > 0 &&
+    !summarizing;
   const summarizeHint = !deidentifiedText.trim()
     ? "請先完成個資遮蔽預覽。"
+    : !confirmationToken
+      ? "PDF 抽取品質不足或確認憑證不存在，請重新遮蔽、改貼完整文字，或改用可選取文字 PDF。"
     : !deidentifiedConfirmed
       ? "請先勾選確認去識別化預覽。"
       : "可產生摘要。";
@@ -72,6 +89,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setSelectedPdf(null);
     setPdfInputKey((value) => value + 1);
     setPdfStatus("");
+    setPdfQuality(null);
     setUsedModeLabel(
       SUMMARY_MODES.find((item) => item.value === mode)?.label ??
         "⭐ 臨床模式（Clinical）"
@@ -90,6 +108,19 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setConfirmationExpiresAt("");
     setSummary("");
     setPdfStatus("");
+    setPdfQuality(null);
+    setCopyStatus("");
+    setDeidentifiedCopyStatus("");
+    setRiskWarnings([]);
+  }
+
+  function clearPreparedRecordState() {
+    setSourceText("");
+    setDeidentifiedText("");
+    setDeidentifiedConfirmed(false);
+    setConfirmationToken("");
+    setConfirmationExpiresAt("");
+    setSummary("");
     setCopyStatus("");
     setDeidentifiedCopyStatus("");
     setRiskWarnings([]);
@@ -120,6 +151,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setCopyStatus("");
     setDeidentifiedCopyStatus("");
     setPdfStatus("");
+    setPdfQuality(null);
     setRiskWarnings([]);
     setDeidentifying(true);
 
@@ -150,6 +182,10 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setCopyStatus("");
     setDeidentifiedCopyStatus("");
     setRiskWarnings([]);
+    setDeidentifiedConfirmed(false);
+    setConfirmationToken("");
+    setConfirmationExpiresAt("");
+    setSummary("");
     setPdfUploading(true);
 
     try {
@@ -168,32 +204,33 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
         text?: string;
         extractedCharCount?: number;
         deidentifiedCharCount?: number;
+        pdfQuality?: PdfQualityReport;
         confirmationToken?: string;
         confirmationExpiresAt?: string;
         message?: string;
       };
 
-      if (
-        !response.ok ||
-        !result.text ||
-        !result.extractedText ||
-        !result.confirmationToken ||
-        !result.confirmationExpiresAt
-      ) {
+      if (!response.ok || !result.text || !result.extractedText) {
         throw new Error(result.message || "pdf_deidentify_failed");
       }
 
       setSourceText(result.extractedText);
       setDeidentifiedText(result.text);
-      setConfirmationToken(result.confirmationToken);
-      setConfirmationExpiresAt(result.confirmationExpiresAt);
+      setConfirmationToken(result.confirmationToken ?? "");
+      setConfirmationExpiresAt(result.confirmationExpiresAt ?? "");
+      setPdfQuality(result.pdfQuality ?? null);
       setDeidentifiedConfirmed(false);
       setSummary("");
       const extractedCount = result.extractedCharCount ?? result.extractedText.length;
+      const qualityStatus = result.pdfQuality?.status;
       const warning =
-        extractedCount < 300
-          ? "解析字數偏少，這份 PDF 可能不是完整文字型 PDF，請先檢查內容。"
-          : "請檢查遮蔽預覽，確認後再產生摘要。";
+        qualityStatus === "blocked"
+          ? "抽取品質不足，系統不會直接允許摘要。請先檢查內容完整性。"
+          : qualityStatus === "caution"
+            ? "抽取品質需人工確認，請檢查遮蔽預覽後再摘要。"
+            : extractedCount < 300
+              ? "解析字數偏少，這份 PDF 可能不是完整文字型 PDF，請先檢查內容。"
+              : "請檢查遮蔽預覽，確認後再產生摘要。";
       setPdfStatus(`PDF 已解析 ${extractedCount.toLocaleString()} 字。${warning}`);
     } catch (caughtError) {
       const errorMessage =
@@ -206,6 +243,12 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
         setError("PDF 解析或個資遮蔽失敗，請確認檔案為可選取文字的 PDF。");
       }
       setPdfStatus("");
+      setPdfQuality(null);
+      setDeidentifiedText("");
+      setDeidentifiedConfirmed(false);
+      setConfirmationToken("");
+      setConfirmationExpiresAt("");
+      setSummary("");
     } finally {
       setPdfUploading(false);
     }
@@ -219,6 +262,11 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
 
     if (!deidentifiedConfirmed) {
       setError("請先確認去識別化後文字預覽，再產生摘要。");
+      return;
+    }
+
+    if (!confirmationToken) {
+      setError("缺少有效確認憑證，請重新執行個資遮蔽預覽。");
       return;
     }
 
@@ -374,13 +422,13 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
                   onChange={(event) => {
                     const file = event.target.files?.[0] ?? null;
                     setError("");
-                    setCopyStatus("");
-                    setDeidentifiedCopyStatus("");
                     setSelectedPdf(null);
+                    setPdfQuality(null);
                     if (!file) {
                       setPdfStatus("");
                       return;
                     }
+                    clearPreparedRecordState();
                     if (file.size > MAX_PDF_FILE_SIZE_BYTES) {
                       setPdfStatus("");
                       setError("PDF 檔案超過 10 MB，請改用較小的文字型 PDF。");
@@ -409,6 +457,43 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
                 <p className="mt-2 rounded-md border border-clinical-line bg-clinical-panel px-3 py-2 text-xs leading-5 text-clinical-ink">
                   {pdfStatus}
                 </p>
+              ) : null}
+              {pdfQuality ? (
+                <div className="mt-2 rounded-md border border-clinical-line bg-white px-3 py-2 text-xs leading-5 text-clinical-ink">
+                  <p className="font-semibold">
+                    PDF 抽取品質：
+                    {pdfQuality.status === "good"
+                      ? "良好"
+                      : pdfQuality.status === "caution"
+                        ? "需人工確認"
+                        : "不足，已阻擋直接摘要"}
+                  </p>
+                  <p>
+                    估計 {formatCount(pdfQuality.estimatedPageCount)} 頁，
+                    {formatCount(pdfQuality.lineCount)} 行，
+                    {formatCount(pdfQuality.characterCount)} 字。
+                  </p>
+                  <p>
+                    偵測段落：
+                    {pdfQuality.detectedSections.length
+                      ? pdfQuality.detectedSections.join("、")
+                      : "未偵測到常見臨床段落"}
+                  </p>
+                  {pdfQuality.blockingIssues.length > 0 ? (
+                    <ul className="mt-1 list-disc pl-5 text-red-700">
+                      {pdfQuality.blockingIssues.map((issue) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {pdfQuality.warnings.length > 0 ? (
+                    <ul className="mt-1 list-disc pl-5 text-clinical-warn">
+                      {pdfQuality.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </div>
@@ -515,7 +600,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
               <input
                 checked={deidentifiedConfirmed}
                 className="mt-1 h-4 w-4 accent-clinical-teal"
-                disabled={!deidentifiedText.trim()}
+                disabled={!deidentifiedText.trim() || !confirmationToken}
                 onChange={(event) => setDeidentifiedConfirmed(event.target.checked)}
                 type="checkbox"
               />

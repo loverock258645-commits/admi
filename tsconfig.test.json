@@ -15,6 +15,7 @@
     "server/deidentify.ts",
     "server/confirmationToken.ts",
     "server/pdfText.ts",
+    "server/pdfQuality.ts",
     "server/riskCheck.ts",
     "server/openai.ts",
     "server/prompts/**/*.ts",
