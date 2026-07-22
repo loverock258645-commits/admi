@@ -48,12 +48,25 @@ addResult(
 );
 
 const privacyRisk = checkDeidentifiedTextRisk(
-  "Patient Name: Jane Test\nMRN: ABC-12345\nDOB: 1940-01-01\nPhone: 0912345678"
+  "Patient Name: Jane Test\nMRN: ABC-12345\nDOB: 1940-01-01\nPhone: 0912345678\nAddress: No. 10, Peace Road, Taipei City"
 );
 addResult(
   "摘要前風險檢查會擋疑似未遮蔽個資",
-  privacyRisk.blockingIssues.length >= 3,
+  privacyRisk.blockingIssues.length >= 4,
   privacyRisk.blockingIssues.join(", ")
+);
+
+const maskedFieldRisk = checkDeidentifiedTextRisk(`Patient Name: [病人姓名已遮蔽]
+MRN: [病歷號已遮蔽]
+DOB: [生日已遮蔽]
+Phone: [電話已遮蔽]
+Address: [地址已遮蔽]
+Family Contact: [聯絡人姓名已遮蔽]
+`);
+addResult(
+  "摘要前風險檢查不會誤擋已遮蔽欄位標籤",
+  maskedFieldRisk.blockingIssues.length === 0,
+  maskedFieldRisk.blockingIssues.join(", ") || "no blocking issues"
 );
 
 const cleanRisk = checkDeidentifiedTextRisk(deidentified);

@@ -9,6 +9,8 @@ type KeywordRule = {
   message: string;
 };
 
+const labeledValueSeparator = "\\s*(?:[:：#-]|\\s)";
+
 const unmaskedIdentifierRules: Array<{ pattern: RegExp; message: string }> = [
   {
     pattern: /\b[A-Z][12]\d{8}\b/g,
@@ -24,26 +26,41 @@ const unmaskedIdentifierRules: Array<{ pattern: RegExp; message: string }> = [
   },
   {
     pattern:
-      /\b(?:Patient Name|Name|姓名)\s*[:：#-]?\s*(?!\[病人姓名已遮蔽\])[\p{L}][^\n\r;|,]{1,60}/giu,
+      new RegExp(
+        String.raw`\b(?:Patient Name|Name|姓名)${labeledValueSeparator}(?!\s*\[病人姓名已遮蔽\])\s*[\p{L}][^\n\r;|,]{1,60}`,
+        "giu"
+      ),
     message: "疑似病人姓名欄位仍未遮蔽"
   },
   {
     pattern:
-      /\b(?:Contact Person|Emergency Contact|Family Contact|Relative Name|Caregiver Name|家屬姓名|聯絡人|緊急聯絡人|主要照顧者)\s*[:：#-]?\s*(?!\[聯絡人姓名已遮蔽\])[\p{L}][^\n\r;|,]{1,60}/giu,
+      new RegExp(
+        String.raw`\b(?:Contact Person|Emergency Contact|Family Contact|Relative Name|Caregiver Name|家屬姓名|聯絡人|緊急聯絡人|主要照顧者)${labeledValueSeparator}(?!\s*\[聯絡人姓名已遮蔽\])\s*[\p{L}][^\n\r;|,]{1,60}`,
+        "giu"
+      ),
     message: "疑似聯絡人或家屬姓名仍未遮蔽"
   },
   {
     pattern:
-      /\b(?:MRN|Chart\s*No\.?|Chart\s*Number|Medical Record No|病歷號)\s*[:：#-]?\s*(?!\[病歷號已遮蔽\])[A-Z0-9-]{4,30}\b/gi,
+      new RegExp(
+        String.raw`\b(?:MRN|Chart\s*No\.?|Chart\s*Number|Medical Record No|病歷號)${labeledValueSeparator}(?!\s*\[病歷號已遮蔽\])\s*[A-Z0-9-]{4,30}\b`,
+        "gi"
+      ),
     message: "疑似病歷號仍未遮蔽"
   },
   {
     pattern:
-      /\b(?:DOB|Date of Birth|Birth Date|Birthday|出生日期|生日)\s*[:：#-]?\s*(?!\[生日已遮蔽\])(?:\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})/gi,
+      new RegExp(
+        String.raw`\b(?:DOB|Date of Birth|Birth Date|Birthday|出生日期|生日)${labeledValueSeparator}(?!\s*\[生日已遮蔽\])\s*(?:\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})`,
+        "gi"
+      ),
     message: "疑似生日仍未遮蔽"
   },
   {
-    pattern: /\b(?:Address|地址)\s*[:：#-]?\s*(?!\[地址已遮蔽\]).{6,120}/gi,
+    pattern: new RegExp(
+      String.raw`\b(?:Address|地址)${labeledValueSeparator}(?!\s*\[地址已遮蔽\])\s*.{6,120}`,
+      "gi"
+    ),
     message: "疑似地址仍未遮蔽"
   }
 ];

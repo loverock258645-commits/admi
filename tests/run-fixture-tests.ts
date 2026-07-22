@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { deIdentifyMedicalText } from "../server/deidentify.js";
 import { buildSummaryPrompt, SUMMARY_MODES } from "../server/prompts/index.js";
+import { checkDeidentifiedTextRisk } from "../server/riskCheck.js";
 import { fakeMedicalRecordFixtures } from "./fixtures/fakeMedicalRecords.js";
 
 type TestResult = {
@@ -70,6 +71,13 @@ for (const fixture of fakeMedicalRecordFixtures) {
     `${fixture.title}：遮蔽後未出現不應出現內容`,
     leakedForbiddenContent.length === 0,
     leakedForbiddenContent.length ? leakedForbiddenContent.join(", ") : "未發現"
+  );
+
+  const deidentifiedRisk = checkDeidentifiedTextRisk(actual);
+  addResult(
+    `${fixture.title}：遮蔽後可通過摘要前風險檢查`,
+    deidentifiedRisk.blockingIssues.length === 0,
+    deidentifiedRisk.blockingIssues.join(", ") || "無阻擋風險"
   );
 
   const missingClinicalDates = fixture.clinicalDatesToPreserve.filter(
