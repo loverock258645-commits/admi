@@ -24,6 +24,13 @@ type SummaryPageProps = {
 
 const MASK_PATTERN =
   /(\[(?:病人姓名|聯絡人姓名|病歷號|身分證字號|電話|地址|生日|床號)已遮蔽\])/g;
+const MASK_TOKEN_PATTERN =
+  /^\[(?:病人姓名|聯絡人姓名|病歷號|身分證字號|電話|地址|生日|床號)已遮蔽\]$/;
+const MAX_PDF_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
+function formatCount(value: number) {
+  return value.toLocaleString("zh-TW");
+}
 
 export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [sourceText, setSourceText] = useState("");
@@ -41,6 +48,14 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [pdfUploading, setPdfUploading] = useState(false);
   const [deidentifying, setDeidentifying] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const maskedItemCount = deidentifiedText.match(MASK_PATTERN)?.length ?? 0;
+  const canSummarize =
+    deidentifiedText.trim().length > 0 && deidentifiedConfirmed && !summarizing;
+  const summarizeHint = !deidentifiedText.trim()
+    ? "請先完成個資遮蔽預覽。"
+    : !deidentifiedConfirmed
+      ? "請先勾選確認去識別化預覽。"
+      : "可產生摘要。";
 
   function clearSensitiveState() {
     setSourceText("");
@@ -75,8 +90,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     }
 
     return deidentifiedText.split(MASK_PATTERN).map((part, index) => {
-      if (MASK_PATTERN.test(part)) {
-        MASK_PATTERN.lastIndex = 0;
+      if (MASK_TOKEN_PATTERN.test(part)) {
         return (
           <mark
             className="rounded bg-amber-200 px-1 text-clinical-ink"
@@ -86,7 +100,6 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
           </mark>
         );
       }
-      MASK_PATTERN.lastIndex = 0;
       return part;
     });
   }
@@ -153,8 +166,16 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
           ? "解析字數偏少，這份 PDF 可能不是完整文字型 PDF，請先檢查內容。"
           : "請檢查遮蔽預覽，確認後再產生摘要。";
       setPdfStatus(`PDF 已解析 ${extractedCount.toLocaleString()} 字。${warning}`);
-    } catch {
-      setError("PDF 解析或個資遮蔽失敗，請確認檔案為可選取文字的 PDF。");
+    } catch (caughtError) {
+      const errorMessage =
+        caughtError instanceof Error ? caughtError.message : "pdf_deidentify_failed";
+      if (errorMessage === "pdf_text_not_found") {
+        setError("PDF 未抽取到可用文字，這份檔案可能是掃描影像 PDF。");
+      } else if (errorMessage === "invalid_pdf") {
+        setError("PDF 檔案格式無法辨識，請重新選擇檔案。");
+      } else {
+        setError("PDF 解析或個資遮蔽失敗，請確認檔案為可選取文字的 PDF。");
+      }
       setPdfStatus("");
     } finally {
       setPdfUploading(false);
@@ -242,69 +263,82 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
 
         <section className="mb-5 rounded-lg border border-clinical-line bg-white p-4 shadow-sm">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
-          <label className="block max-w-sm">
-            <span className="mb-2 block text-sm font-semibold text-clinical-ink">
-              摘要模式
-            </span>
-            <select
-              className="w-full rounded-md border border-clinical-line bg-white px-3 py-2 text-sm text-clinical-ink outline-none transition focus:border-clinical-teal focus:ring-2 focus:ring-clinical-teal/15"
-              value={mode}
-              onChange={(event) => {
-                const nextMode = event.target.value as SummaryMode;
-                setMode(nextMode);
-                setSummary("");
-                setCopyStatus("");
-                setUsedModeLabel(
-                  SUMMARY_MODES.find((item) => item.value === nextMode)?.label ??
-                    "⭐ 臨床模式（Clinical）"
-                );
-              }}
-            >
-              {SUMMARY_MODES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div>
-            <span className="mb-2 block text-sm font-semibold text-clinical-ink">
-              PDF 病摘
-            </span>
-            <div className="flex flex-wrap items-center gap-3">
-              <input
-                key={pdfInputKey}
-                accept="application/pdf,.pdf"
-                className="block max-w-full text-sm text-clinical-muted file:mr-3 file:rounded-md file:border file:border-clinical-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-clinical-ink hover:file:bg-clinical-panel"
-                type="file"
+            <label className="block max-w-sm">
+              <span className="mb-2 block text-sm font-semibold text-clinical-ink">
+                摘要模式
+              </span>
+              <select
+                className="w-full rounded-md border border-clinical-line bg-white px-3 py-2 text-sm text-clinical-ink outline-none transition focus:border-clinical-teal focus:ring-2 focus:ring-clinical-teal/15"
+                value={mode}
                 onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  setSelectedPdf(file);
-                  setError("");
+                  const nextMode = event.target.value as SummaryMode;
+                  setMode(nextMode);
+                  setSummary("");
                   setCopyStatus("");
-                  setDeidentifiedCopyStatus("");
-                  setPdfStatus(file ? `已選擇：${file.name}` : "");
+                  setUsedModeLabel(
+                    SUMMARY_MODES.find((item) => item.value === nextMode)?.label ??
+                      "⭐ 臨床模式（Clinical）"
+                  );
                 }}
-              />
-              <button
-                className="rounded-md bg-clinical-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-clinical-tealDark disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={handlePdfDeidentify}
-                disabled={!selectedPdf || pdfUploading}
-                type="button"
               >
-                {pdfUploading ? "解析中..." : "解析 PDF 並遮蔽個資"}
-              </button>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-clinical-muted">
-              目前僅支援可選取文字的 PDF，不支援掃描影像 OCR。PDF 不會儲存，解析後請先確認遮蔽預覽再產生摘要。
-            </p>
-            {pdfStatus ? (
-              <p className="mt-2 rounded-md border border-clinical-line bg-clinical-panel px-3 py-2 text-xs leading-5 text-clinical-ink">
-                {pdfStatus}
+                {SUMMARY_MODES.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div>
+              <span className="mb-2 block text-sm font-semibold text-clinical-ink">
+                PDF 病摘
+              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  key={pdfInputKey}
+                  accept="application/pdf,.pdf"
+                  className="block max-w-full text-sm text-clinical-muted file:mr-3 file:rounded-md file:border file:border-clinical-line file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-clinical-ink hover:file:bg-clinical-panel"
+                  type="file"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setError("");
+                    setCopyStatus("");
+                    setDeidentifiedCopyStatus("");
+                    setSelectedPdf(null);
+                    if (!file) {
+                      setPdfStatus("");
+                      return;
+                    }
+                    if (file.size > MAX_PDF_FILE_SIZE_BYTES) {
+                      setPdfStatus("");
+                      setError("PDF 檔案超過 10 MB，請改用較小的文字型 PDF。");
+                      setPdfInputKey((value) => value + 1);
+                      return;
+                    }
+                    setSelectedPdf(file);
+                    setPdfStatus(
+                      `已選擇：${file.name}，大小 ${formatCount(file.size)} bytes。`
+                    );
+                  }}
+                />
+                <button
+                  className="rounded-md bg-clinical-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-clinical-tealDark disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handlePdfDeidentify}
+                  disabled={!selectedPdf || pdfUploading}
+                  type="button"
+                >
+                  {pdfUploading ? "解析中..." : "解析 PDF 並遮蔽個資"}
+                </button>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-clinical-muted">
+                目前僅支援可選取文字的 PDF，不支援掃描影像 OCR。PDF 不會儲存，解析後請先確認遮蔽預覽再產生摘要。
               </p>
-            ) : null}
-          </div>
+              {pdfStatus ? (
+                <p className="mt-2 rounded-md border border-clinical-line bg-clinical-panel px-3 py-2 text-xs leading-5 text-clinical-ink">
+                  {pdfStatus}
+                </p>
+              ) : null}
+            </div>
           </div>
         </section>
 
@@ -317,9 +351,14 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
         <div className="grid gap-5 xl:grid-cols-2">
           <section className="rounded-lg border border-clinical-line bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold text-clinical-ink">
-                英文病歷內容
-              </h2>
+              <div>
+                <h2 className="text-base font-semibold text-clinical-ink">
+                  英文病歷內容
+                </h2>
+                <p className="mt-1 text-xs text-clinical-muted">
+                  {formatCount(sourceText.length)} / 120,000 字
+                </p>
+              </div>
               <button
                 className="rounded-md border border-clinical-line px-3 py-2 text-sm font-medium text-clinical-ink transition hover:bg-clinical-panel disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={clearSensitiveState}
@@ -349,9 +388,15 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
 
           <section className="rounded-lg border border-clinical-line bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold text-clinical-ink">
-                去識別化後文字預覽
-              </h2>
+              <div>
+                <h2 className="text-base font-semibold text-clinical-ink">
+                  去識別化後文字預覽
+                </h2>
+                <p className="mt-1 text-xs text-clinical-muted">
+                  {formatCount(deidentifiedText.length)} 字，已標記{" "}
+                  {formatCount(maskedItemCount)} 個遮蔽項目
+                </p>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 {deidentifiedCopyStatus ? (
                   <span className="text-sm text-clinical-teal">
@@ -369,13 +414,16 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
                 <button
                   className="rounded-md bg-clinical-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-clinical-tealDark disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={handleSummarize}
-                  disabled={!deidentifiedText.trim() || !deidentifiedConfirmed || summarizing}
+                  disabled={!canSummarize}
                   type="button"
                 >
                   {summarizing ? "產生中..." : "產生摘要"}
                 </button>
               </div>
             </div>
+            <p className="mb-2 rounded-md border border-clinical-line bg-white px-3 py-2 text-xs leading-5 text-clinical-muted">
+              {summarizeHint}
+            </p>
             <pre className="h-[28rem] overflow-auto whitespace-pre-wrap rounded-md border border-clinical-line bg-clinical-panel p-3 font-mono text-sm leading-6 text-clinical-ink">
               {renderDeidentifiedPreview()}
             </pre>
@@ -396,9 +444,14 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
 
         <section className="mt-5 rounded-lg border border-clinical-line bg-white p-4 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-clinical-ink">
-              摘要結果
-            </h2>
+            <div>
+              <h2 className="text-base font-semibold text-clinical-ink">
+                摘要結果
+              </h2>
+              <p className="mt-1 text-xs text-clinical-muted">
+                {summary ? `${formatCount(summary.length)} 字` : "尚未產生摘要"}
+              </p>
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-sm text-clinical-muted">
                 目前模式：{usedModeLabel}
