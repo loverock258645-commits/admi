@@ -7,3 +7,4 @@ dist-test/
 npm-debug.log*
 operation_logs.jsonl
 tests/output/*.md
+local-output/

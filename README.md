@@ -20,7 +20,7 @@
 .
 ├── client/                 # React、TypeScript、Tailwind 前端
 ├── server/                 # Express、TypeScript 後端
-├── scripts/                # 密碼雜湊輔助工具
+├── scripts/                # 密碼雜湊與本機去識別化輔助工具
 ├── .env.example            # 環境變數範例
 ├── package.json            # 安裝、開發、建置、啟動指令
 ├── SECURITY.md             # 資安限制與注意事項
@@ -32,6 +32,40 @@
 ```bash
 npm install
 ```
+
+## 建議安全流程
+
+若處理真實病歷，建議採用「本機先去識別化，再貼到雲端摘要」：
+
+1. 在本機或院內允許的環境執行本機去識別化指令。
+2. 人工檢查輸出檔，確認沒有姓名、病歷號、身分證字號、電話、地址、生日、床號或家屬聯絡資訊。
+3. 將確認後的去識別化文字貼到網站。
+4. 在網站再次執行「個資遮蔽預覽」與人工確認。
+5. 再產生摘要。
+
+此流程會比直接把原始 PDF 上傳到雲端更保守。若院內規範不允許資料離院或送外部 AI，即使已去識別化，也不要用真實病歷測試或摘要。
+
+## 本機去識別化前處理
+
+支援 `.pdf`、`.txt`、`.text`、`.md`。此指令不呼叫 OpenAI、不連線網路、不把病歷內容印到終端。
+
+```bash
+npm run deidentify:local -- /path/to/record.pdf
+```
+
+預設輸出到 `local-output/`，此資料夾已加入 `.gitignore`。終端只會顯示抽取字數、遮蔽項目數、PDF 抽取品質與輸出檔路徑。
+
+可自訂輸出檔：
+
+```bash
+npm run deidentify:local -- /path/to/record.pdf --output /path/to/deidentified.txt
+```
+
+注意：
+
+- 文字型 PDF 可抽取文字；掃描影像 PDF 仍需要院內允許的 OCR 或人工處理。
+- `local-output/` 內雖然是去識別化文字，仍應視為敏感資料，使用後請依院內規範處理。
+- 本機去識別化是前處理，不取代網站上的二次去識別化預覽與人工確認。
 
 ## 建立密碼雜湊
 
@@ -115,6 +149,8 @@ npm start
 
 ## PDF 病摘上傳
 
+最保守的做法是先用 `npm run deidentify:local` 在本機完成前處理，再把確認後的去識別化文字貼到網站。
+
 摘要頁支援上傳文字型 PDF：
 
 1. 選擇 PDF 檔案。
@@ -144,6 +180,7 @@ npm start
 
 `mode` 可使用：
 
+- `clinical`：臨床模式，預設模式，偏向第一線護理師快速閱讀與交班。
 - `auto`：自動判斷文件類型，再套用最適合格式。
 - `general`：一般病歷摘要。
 - `nursingHandoff`：護理交班。
@@ -197,6 +234,14 @@ npm run test:security-workflow
 ```
 
 此測試會檢查短效確認憑證、摘要前疑似個資阻擋、摘要後安寧決策保留提示與過度醫療建議語氣提示。
+
+執行本機去識別化測試：
+
+```bash
+npm run test:local-deidentify
+```
+
+此測試會使用虛構假病歷檢查本機 `.txt` 與文字型 PDF 去識別化流程，並確認掃描型 PDF 不會被誤產生可摘要內容。
 
 ## 操作紀錄
 

@@ -19,6 +19,7 @@
     "server/riskCheck.ts",
     "server/openai.ts",
     "server/prompts/**/*.ts",
+    "scripts/deidentify-local.ts",
     "tests/**/*.ts"
   ]
 }
