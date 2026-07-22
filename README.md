@@ -212,6 +212,8 @@ npm start
 
 每份資料包含英文原文、預期去識別化版本、預期應抓出的重點與不應出現內容。
 
+完整上線前驗收流程請看 `docs/RELEASE_CHECKLIST.md`。
+
 執行本機 fixture 測試：
 
 ```bash

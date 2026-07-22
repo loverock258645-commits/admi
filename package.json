@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.client.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.scripts.json",
     "hash-password": "node scripts/hash-password.mjs",
     "deidentify:local": "tsx scripts/deidentify-local.ts",
+    "test:release": "node scripts/run-release-checks.mjs",
     "test:fixtures": "tsc -p tsconfig.test.json && node dist-test/tests/run-fixture-tests.js",
     "test:pdf-fixtures": "tsc -p tsconfig.test.json && node dist-test/tests/run-pdf-fixture-tests.js",
     "test:local-deidentify": "tsc -p tsconfig.test.json && node dist-test/tests/run-local-deidentify-tests.js",
