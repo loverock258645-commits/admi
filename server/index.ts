@@ -310,7 +310,12 @@ app.post("/api/summarize", requireAuth, async (request: Request, response: Respo
 
 if (isProduction) {
   app.use(express.static(clientDistPath, { etag: false, maxAge: 0 }));
-  app.get("*", (_request: Request, response: Response) => {
+  app.get("*", (request: Request, response: Response) => {
+    if (path.extname(request.path)) {
+      response.status(404).send("Not found");
+      return;
+    }
+
     response.sendFile(path.join(clientDistPath, "index.html"));
   });
 }
