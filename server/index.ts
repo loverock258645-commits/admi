@@ -15,10 +15,15 @@ import {
   setSessionCookie
 } from "./auth.js";
 import { writeAuditEvent } from "./audit.js";
+import {
+  createConfirmationToken,
+  verifyConfirmationToken
+} from "./confirmationToken.js";
 import { deIdentifyMedicalText } from "./deidentify.js";
 import { summarizeMedicalText } from "./openai.js";
 import { extractTextFromPdfBuffer } from "./pdfText.js";
 import { getModeLabel, isSummaryMode } from "./prompts/index.js";
+import { checkDeidentifiedTextRisk, checkSummaryOutputRisk } from "./riskCheck.js";
 
 dotenv.config();
 
@@ -33,7 +38,8 @@ const textSchema = z.object({
 });
 
 const summarizeSchema = textSchema.extend({
-  mode: z.unknown().optional().transform((value) => (isSummaryMode(value) ? value : "auto"))
+  mode: z.unknown().optional().transform((value) => (isSummaryMode(value) ? value : "auto")),
+  confirmationToken: z.string().min(20).max(1200).optional()
 });
 
 app.disable("x-powered-by");
@@ -162,13 +168,14 @@ app.post("/api/deidentify", requireAuth, async (request: Request, response: Resp
 
   try {
     const text = deIdentifyMedicalText(parsed.data.text);
+    const confirmation = createConfirmationToken(text);
     await writeAuditEvent({
       username: request.auth?.username,
       loginTime: request.auth?.loginTime,
       feature: "deidentify",
       success: true
     });
-    response.json({ text });
+    response.json({ text, ...confirmation });
   } catch {
     await writeAuditEvent({
       username: request.auth?.username,
@@ -206,6 +213,7 @@ app.post(
       }
 
       const text = deIdentifyMedicalText(extractedText);
+      const confirmation = createConfirmationToken(text);
       await writeAuditEvent({
         username: request.auth?.username,
         loginTime: request.auth?.loginTime,
@@ -216,7 +224,8 @@ app.post(
         extractedText,
         text,
         extractedCharCount: extractedText.length,
-        deidentifiedCharCount: text.length
+        deidentifiedCharCount: text.length,
+        ...confirmation
       });
     } catch (error) {
       const errorType = error instanceof Error ? error.message : "pdf_deidentify_failed";
@@ -241,14 +250,48 @@ app.post("/api/summarize", requireAuth, async (request: Request, response: Respo
 
   try {
     const deidentifiedText = deIdentifyMedicalText(parsed.data.text);
+    if (!verifyConfirmationToken(deidentifiedText, parsed.data.confirmationToken)) {
+      await writeAuditEvent({
+        username: request.auth?.username,
+        loginTime: request.auth?.loginTime,
+        feature: "summarize",
+        success: false,
+        errorType: "confirmation_required"
+      });
+      response.status(409).json({ message: "confirmation_required" });
+      return;
+    }
+
+    const preRisk = checkDeidentifiedTextRisk(deidentifiedText);
+    if (preRisk.blockingIssues.length > 0) {
+      await writeAuditEvent({
+        username: request.auth?.username,
+        loginTime: request.auth?.loginTime,
+        feature: "summarize",
+        success: false,
+        errorType: "privacy_risk_detected"
+      });
+      response.status(422).json({
+        message: "privacy_risk_detected",
+        riskWarnings: preRisk.blockingIssues
+      });
+      return;
+    }
+
     const summary = await summarizeMedicalText(deidentifiedText, parsed.data.mode);
+    const outputRisk = checkSummaryOutputRisk(deidentifiedText, summary);
     await writeAuditEvent({
       username: request.auth?.username,
       loginTime: request.auth?.loginTime,
       feature: "summarize",
       success: true
     });
-    response.json({ summary, mode: parsed.data.mode, modeLabel: getModeLabel(parsed.data.mode) });
+    response.json({
+      summary,
+      mode: parsed.data.mode,
+      modeLabel: getModeLabel(parsed.data.mode),
+      riskWarnings: outputRisk.warnings
+    });
   } catch (error) {
     const errorType = error instanceof Error ? error.message : "summarize_failed";
     await writeAuditEvent({

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { apiRequest } from "../api";
+import { useEffect, useState } from "react";
+import { ApiError, apiRequest } from "../api";
 
 const SUMMARY_MODES = [
   { value: "clinical", label: "⭐ 臨床模式（Clinical）" },
@@ -27,6 +27,7 @@ const MASK_PATTERN =
 const MASK_TOKEN_PATTERN =
   /^\[(?:病人姓名|聯絡人姓名|病歷號|身分證字號|電話|地址|生日|床號)已遮蔽\]$/;
 const MAX_PDF_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const IDLE_LOGOUT_MS = 15 * 60 * 1000;
 
 function formatCount(value: number) {
   return value.toLocaleString("zh-TW");
@@ -36,6 +37,8 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [sourceText, setSourceText] = useState("");
   const [deidentifiedText, setDeidentifiedText] = useState("");
   const [deidentifiedConfirmed, setDeidentifiedConfirmed] = useState(false);
+  const [confirmationToken, setConfirmationToken] = useState("");
+  const [confirmationExpiresAt, setConfirmationExpiresAt] = useState("");
   const [summary, setSummary] = useState("");
   const [mode, setMode] = useState<SummaryMode>("clinical");
   const [usedModeLabel, setUsedModeLabel] = useState("⭐ 臨床模式（Clinical）");
@@ -45,6 +48,8 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
   const [error, setError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
   const [deidentifiedCopyStatus, setDeidentifiedCopyStatus] = useState("");
+  const [riskWarnings, setRiskWarnings] = useState<string[]>([]);
+  const [idleNotice, setIdleNotice] = useState("");
   const [pdfUploading, setPdfUploading] = useState(false);
   const [deidentifying, setDeidentifying] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
@@ -61,6 +66,8 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setSourceText("");
     setDeidentifiedText("");
     setDeidentifiedConfirmed(false);
+    setConfirmationToken("");
+    setConfirmationExpiresAt("");
     setSummary("");
     setSelectedPdf(null);
     setPdfInputKey((value) => value + 1);
@@ -72,16 +79,20 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setError("");
     setCopyStatus("");
     setDeidentifiedCopyStatus("");
+    setRiskWarnings([]);
   }
 
   function handleSourceTextChange(value: string) {
     setSourceText(value);
     setDeidentifiedText("");
     setDeidentifiedConfirmed(false);
+    setConfirmationToken("");
+    setConfirmationExpiresAt("");
     setSummary("");
     setPdfStatus("");
     setCopyStatus("");
     setDeidentifiedCopyStatus("");
+    setRiskWarnings([]);
   }
 
   function renderDeidentifiedPreview() {
@@ -109,14 +120,21 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setCopyStatus("");
     setDeidentifiedCopyStatus("");
     setPdfStatus("");
+    setRiskWarnings([]);
     setDeidentifying(true);
 
     try {
-      const result = await apiRequest<{ text: string }>("/api/deidentify", {
+      const result = await apiRequest<{
+        text: string;
+        confirmationToken: string;
+        confirmationExpiresAt: string;
+      }>("/api/deidentify", {
         method: "POST",
         body: JSON.stringify({ text: sourceText })
       });
       setDeidentifiedText(result.text);
+      setConfirmationToken(result.confirmationToken);
+      setConfirmationExpiresAt(result.confirmationExpiresAt);
       setDeidentifiedConfirmed(false);
       setSummary("");
     } catch {
@@ -131,6 +149,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setError("");
     setCopyStatus("");
     setDeidentifiedCopyStatus("");
+    setRiskWarnings([]);
     setPdfUploading(true);
 
     try {
@@ -149,15 +168,25 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
         text?: string;
         extractedCharCount?: number;
         deidentifiedCharCount?: number;
+        confirmationToken?: string;
+        confirmationExpiresAt?: string;
         message?: string;
       };
 
-      if (!response.ok || !result.text || !result.extractedText) {
+      if (
+        !response.ok ||
+        !result.text ||
+        !result.extractedText ||
+        !result.confirmationToken ||
+        !result.confirmationExpiresAt
+      ) {
         throw new Error(result.message || "pdf_deidentify_failed");
       }
 
       setSourceText(result.extractedText);
       setDeidentifiedText(result.text);
+      setConfirmationToken(result.confirmationToken);
+      setConfirmationExpiresAt(result.confirmationExpiresAt);
       setDeidentifiedConfirmed(false);
       setSummary("");
       const extractedCount = result.extractedCharCount ?? result.extractedText.length;
@@ -186,6 +215,7 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
     setError("");
     setCopyStatus("");
     setDeidentifiedCopyStatus("");
+    setRiskWarnings([]);
 
     if (!deidentifiedConfirmed) {
       setError("請先確認去識別化後文字預覽，再產生摘要。");
@@ -199,14 +229,32 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
         summary: string;
         mode: SummaryMode;
         modeLabel: string;
+        riskWarnings?: string[];
       }>("/api/summarize", {
         method: "POST",
-        body: JSON.stringify({ text: deidentifiedText, mode })
+        body: JSON.stringify({ text: deidentifiedText, mode, confirmationToken })
       });
       setSummary(result.summary);
       setUsedModeLabel(result.modeLabel);
-    } catch {
-      setError("摘要產生失敗，請稍後再試。");
+      setRiskWarnings(result.riskWarnings ?? []);
+    } catch (caughtError) {
+      if (caughtError instanceof ApiError) {
+        if (caughtError.message === "confirmation_required") {
+          setError("確認憑證已失效，請重新執行個資遮蔽預覽後再產生摘要。");
+        } else if (caughtError.message === "privacy_risk_detected") {
+          const warnings = Array.isArray(caughtError.payload.riskWarnings)
+            ? caughtError.payload.riskWarnings.filter(
+                (item): item is string => typeof item === "string"
+              )
+            : [];
+          setRiskWarnings(warnings);
+          setError("系統偵測到疑似未遮蔽個資，請重新檢查去識別化預覽。");
+        } else {
+          setError("摘要產生失敗，請稍後再試。");
+        }
+      } else {
+        setError("摘要產生失敗，請稍後再試。");
+      }
     } finally {
       setSummarizing(false);
     }
@@ -233,6 +281,30 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
       window.history.replaceState(null, "", "/");
     }
   }
+
+  useEffect(() => {
+    let timeoutId = window.setTimeout(() => {
+      setIdleNotice("已因閒置超過 15 分鐘自動登出。");
+      void handleLogout();
+    }, IDLE_LOGOUT_MS);
+
+    function resetIdleTimer() {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        setIdleNotice("已因閒置超過 15 分鐘自動登出。");
+        void handleLogout();
+      }, IDLE_LOGOUT_MS);
+    }
+
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    events.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer));
+    return () => {
+      window.clearTimeout(timeoutId);
+      events.forEach((eventName) =>
+        window.removeEventListener(eventName, resetIdleTimer)
+      );
+    };
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#eef4f7]">
@@ -348,6 +420,12 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
           </section>
         ) : null}
 
+        {idleNotice ? (
+          <section className="mb-5 rounded-lg border border-clinical-line bg-white px-4 py-3 text-sm text-clinical-muted">
+            {idleNotice}
+          </section>
+        ) : null}
+
         <div className="grid gap-5 xl:grid-cols-2">
           <section className="rounded-lg border border-clinical-line bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -423,6 +501,12 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
             </div>
             <p className="mb-2 rounded-md border border-clinical-line bg-white px-3 py-2 text-xs leading-5 text-clinical-muted">
               {summarizeHint}
+              {confirmationExpiresAt
+                ? ` 確認憑證有效至 ${new Date(confirmationExpiresAt).toLocaleTimeString("zh-TW", {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}。`
+                : ""}
             </p>
             <pre className="h-[28rem] overflow-auto whitespace-pre-wrap rounded-md border border-clinical-line bg-clinical-panel p-3 font-mono text-sm leading-6 text-clinical-ink">
               {renderDeidentifiedPreview()}
@@ -469,6 +553,16 @@ export function SummaryPage({ username, onLogout }: SummaryPageProps) {
               </button>
             </div>
           </div>
+          {riskWarnings.length > 0 ? (
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-clinical-warn">
+              <p className="font-semibold">自動 QA 警示</p>
+              <ul className="mt-1 list-disc pl-5">
+                {riskWarnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <pre className="min-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-clinical-line bg-clinical-panel p-4 text-sm leading-7 text-clinical-ink">
             {summary || "中文臨床摘要會顯示在這裡。"}
           </pre>

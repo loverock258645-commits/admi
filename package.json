@@ -13,6 +13,7 @@
     "hash-password": "node scripts/hash-password.mjs",
     "test:fixtures": "tsc -p tsconfig.test.json && node dist-test/tests/run-fixture-tests.js",
     "test:pdf-fixtures": "tsc -p tsconfig.test.json && node dist-test/tests/run-pdf-fixture-tests.js",
+    "test:security-workflow": "tsc -p tsconfig.test.json && node dist-test/tests/run-security-workflow-tests.js",
     "test:openai-output": "tsc -p tsconfig.test.json && node dist-test/tests/run-openai-output-tests.js"
   },
   "dependencies": {

@@ -3,6 +3,16 @@ export type MeResponse = {
   username?: string;
 };
 
+export class ApiError extends Error {
+  payload: Record<string, unknown>;
+
+  constructor(message: string, payload: Record<string, unknown>) {
+    super(message);
+    this.name = "ApiError";
+    this.payload = payload;
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
@@ -22,7 +32,7 @@ export async function apiRequest<T>(
   };
 
   if (!response.ok) {
-    throw new Error(data.message || "request_failed");
+    throw new ApiError(data.message || "request_failed", data);
   }
 
   return data;
